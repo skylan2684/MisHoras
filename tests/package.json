@@ -1,0 +1,7 @@
+{
+  "name": "mishoras-tests",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "test": "node --test" },
+  "devDependencies": { "jsdom": "^26.0.0" }
+}

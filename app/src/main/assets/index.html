@@ -1,0 +1,63 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#112f32"><title>Mis horas · DonPinol</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f3eb;color:#173538;font:16px "DM Sans",system-ui,sans-serif}main{max-width:740px;margin:auto;padding:22px 16px 48px}header,.row{display:flex;align-items:center;justify-content:space-between;gap:12px}header{margin-bottom:24px}header b{font-size:23px;letter-spacing:-1px}header b:before{content:"◷";background:#163a3b;color:#dbf782;border-radius:10px;padding:4px 8px;margin-right:8px}button,select{font:inherit;cursor:pointer;border-radius:12px;padding:12px;border:1px solid #aab9ae;background:#fff;color:inherit}button:focus-visible,select:focus-visible{outline:3px solid #ce8319}section{border-radius:21px;background:white;padding:20px;margin:14px 0}.hero{background:linear-gradient(120deg,#102e31,#1a4947);color:white;padding:24px}.tag,small{font-size:12px;letter-spacing:.05em}.tag{color:#dbf782;font-weight:700}.clock{font-size:clamp(32px,10vw,72px);font-weight:650;letter-spacing:-.06em;font-variant-numeric:tabular-nums;line-height:1.2}.date{margin:5px 0 22px;text-transform:capitalize}.run{border-top:1px solid #54716e;padding-top:15px}.run strong{font-variant-numeric:tabular-nums}h2{font-size:19px;margin:0 0 14px}select,.go{width:100%}.go{background:#d5ef88;border:0;font-weight:750;margin-top:10px;min-height:52px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cards div{background:#eaf0dc;border-radius:12px;padding:14px}.cards strong{display:block;margin-top:6px;font-size:23px}.entry{padding:12px 0;border-top:1px solid #dfe5dd}.entry span{display:block;margin-top:4px;font-size:14px}.muted{color:#536967}#reset{margin-top:12px;width:100%}label{display:block;font-weight:700;margin-bottom:8px}p{margin:8px 0}footer{text-align:center;color:#536967;font-size:12px;margin-top:24px}
+[hidden]{display:none!important}#nav{padding:9px 14px;font-weight:600}.alt{width:100%;margin-top:10px;min-height:48px}
+</style><main><header><b>Mis horas</b><button id="nav" type="button">Historial</button></header><div id="home"><section class="hero"><div class="row"><span class="tag" id="status"></span><small>Managua · NI</small></div><div class="clock" id="clock"></div><p class="date" id="date"></p><div class="row run"><span>Tiempo de jornada</span><strong id="timer"></strong></div></section>
+<section><label for="shift">Turno de la jornada</label><select id="shift"><option>Día · 5:00 a. m. – 12:30 p. m.</option><option>Noche · 4:00 p. m. – 9:00 p. m.</option><option>Domingo · 5:00 a. m. – 11:00 a. m.</option></select><button class="go" id="mark"></button><p role="status" id="notice"></p></section>
+<section><h2 id="summary"></h2><div class="cards"><div>Esta semana<strong id="week"></strong></div><div>Este mes<strong id="month"></strong></div></div></section></div><div id="hist" hidden><section><h2>Historial de jornadas</h2><div id="history"></div></section><section><h2>Exportar y compartir</h2><button class="go" id="shareText" type="button">Compartir por WhatsApp</button><button class="alt" id="shareCsv" type="button">Exportar archivo (CSV)</button><p role="status" id="histNotice"></p></section></div><footer>DonPinol TechWorks</footer></main>
+<script>
+const el=id=>document.getElementById(id), zone='America/Managua',fmt=options=>new Intl.DateTimeFormat('es-NI',{timeZone:zone,...options}),clockFmt=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',minute:'2-digit',second:'2-digit',hourCycle:'h12'}),dateFmt=fmt({dateStyle:'full'}),stamp={format:time=>fmt({dateStyle:'short'}).format(time)+' · '+clockFmt.format(time)};
+const lengths=[450,300,360],names=['Día','Noche','Domingo'],key='donpinol.mishoras.v1';
+let data={real:[]},available=true;
+try{const saved=localStorage.getItem(key);if(saved){try{const p=JSON.parse(saved);if(p&&Array.isArray(p.real)&&p.real.every(r=>r&&Number.isFinite(r.start)&&(r.end===null||Number.isFinite(r.end))&&[0,1,2].includes(r.shift)))data=p;else throw 0}catch{localStorage.setItem(key+'.respaldo-danado',saved)}}}catch{available=false}
+const rows=()=>data.real,active=()=>rows().find(r=>r.end===null);
+function save(){try{localStorage.setItem(key,JSON.stringify(data));available=true}catch{available=false}if(!available)el('notice').textContent='Este navegador solo conserva las marcas mientras esta página esté abierta.'}
+function duration(ms){const sec=Math.floor(Math.max(0,ms)/1000);return [Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(n=>String(n).padStart(2,'0')).join(':')}
+function hours(ms){const mins=Math.floor(Math.abs(ms)/60000);return Math.floor(mins/60)+' h '+String(mins%60).padStart(2,'0')+' min'}
+function tick(){const now=Date.now(),r=active(),last=rows().at(-1);el('clock').textContent=clockFmt.format(now);el('date').textContent=dateFmt.format(now);el('timer').textContent=duration(r?now-r.start:last?last.end-last.start:0);
+if(r&&el('activeHours'))el('activeHours').textContent=duration(now-r.start);
+// Managua uses UTC−06:00. Compute Monday and month boundaries in local civil time.
+const offset=6*3600000,day=86400000,local=new Date(now-offset),midnight=Math.floor((now-offset)/day)*day+offset;
+const weekStart=midnight-((local.getUTCDay()+6)%7)*day, monthStart=Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),1)+offset;
+for(const [field,start] of [['week',weekStart],['month',monthStart]])el(field).textContent=hours(rows().reduce((sum,e)=>sum+Math.max(0,(e.end??now)-Math.max(start,e.start)),0))}
+function fieldsOf(e){const closed=e.end!==null,difference=closed?e.end-e.start-lengths[e.shift]*60000:0;return [
+  ['Fecha',dateFmt.format(e.start)],
+  ['Turno',names[e.shift]],
+  ['Entrada',clockFmt.format(e.start)],
+  ['Salida',closed?(dateFmt.format(e.start)===dateFmt.format(e.end)?clockFmt.format(e.end):stamp.format(e.end)):'Pendiente'],
+  ['Horas trabajadas',duration((e.end??Date.now())-e.start)],
+  ['Diferencia',closed?(difference<0?'−':'+')+duration(Math.abs(difference)):'Pendiente de salida']
+]}
+function render(){const r=active();el('status').textContent='REGISTRO REAL'+(r?' · EN CURSO':'');el('summary').textContent='Horas acumuladas';el('shift').disabled=!!r;if(r)el('shift').selectedIndex=r.shift;el('mark').textContent=r?'Marcar salida':'Marcar entrada';
+el('history').replaceChildren();for(const e of [...rows()].reverse()){const div=document.createElement('div');div.className='entry';const closed=e.end!==null;const fields=fieldsOf(e);
+for(const [label,value] of fields){
+  const line=document.createElement('span'),heading=document.createElement('b'),detail=document.createElement('time');
+  heading.textContent=label+': ';detail.textContent=value;
+  if(!closed&&label==='Horas trabajadas')detail.id='activeHours';
+  line.append(heading,detail);div.append(line)
+}
+el('history').append(div)}if(!rows().length)el('history').textContent='Aquí aparecerá tu primera marca de entrada.';tick()}
+el('mark').onclick=()=>{const now=Date.now(),r=active();if(r&&now<r.start){el('notice').textContent='Revisá la hora del teléfono antes de marcar salida.';return}if(r)r.end=now;else rows().push({start:now,end:null,shift:el('shift').selectedIndex});el('notice').textContent=r?'Salida registrada.':'Entrada registrada.';save();render()};
+// Pantalla de historial: usa #historial para que el botón Atrás de Android vuelva al inicio.
+function route(){const h=location.hash==='#historial';el('home').hidden=h;el('hist').hidden=!h;el('nav').textContent=h?'Inicio':'Historial';window.scrollTo(0,0)}
+el('nav').onclick=()=>{if(location.hash==='#historial'){if(history.length>1)history.back();else{location.hash='';route()}}else{location.hash='#historial';route()}};
+addEventListener('hashchange',route);
+const pad=n=>String(n).padStart(2,'0');
+function stampFull(ms){const l=new Date(ms-6*3600000);return l.getUTCFullYear()+'-'+pad(l.getUTCMonth()+1)+'-'+pad(l.getUTCDate())+' '+pad(l.getUTCHours())+':'+pad(l.getUTCMinutes())+':'+pad(l.getUTCSeconds())}
+function reportText(){const lines=['Mis horas · DonPinol','Informe al '+stamp.format(Date.now())+' (Managua)','Esta semana: '+el('week').textContent+' · Este mes: '+el('month').textContent,''];
+[...rows()].reverse().forEach((e,i)=>{lines.push((i+1)+') '+fieldsOf(e).map(f=>f[0]+': '+f[1]).join('\n   '));lines.push('')});return lines.join('\n').trim()}
+const quote=v=>'"'+String(v).replace(/"/g,'""')+'"';
+function csvText(){const now=Date.now(),out=[['Fecha','Turno','Entrada','Salida','Horas trabajadas','Diferencia'].map(quote).join(',')];
+rows().forEach(e=>{const closed=e.end!==null,d=closed?e.end-e.start-lengths[e.shift]*60000:0;
+out.push([stampFull(e.start).slice(0,10),names[e.shift],stampFull(e.start),closed?stampFull(e.end):'En curso',duration((e.end??now)-e.start),closed?(d<0?'-':'+')+duration(Math.abs(d)):'En curso'].map(quote).join(','))});return out.join('\r\n')+'\r\n'}
+const say=t=>{el('histNotice').textContent=t};
+el('shareText').onclick=()=>{if(!rows().length){say('Todavía no hay jornadas para compartir.');return}const t=reportText();
+if(window.MisHorasNativo){window.MisHorasNativo.compartirTexto(t);say('Elegí el contacto o grupo de WhatsApp.')}
+else if(navigator.share){navigator.share({text:t}).catch(()=>{})}
+else if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>say('Informe copiado. Pegalo en WhatsApp.'),()=>say('No se pudo copiar el informe.'))}
+else say('Este navegador no permite compartir.')};
+el('shareCsv').onclick=()=>{if(!rows().length){say('Todavía no hay jornadas para exportar.');return}const name='MisHoras-'+stampFull(Date.now()).slice(0,10)+'.csv',csv=csvText();
+if(window.MisHorasNativo){window.MisHorasNativo.compartirCsv(name,csv);say('Archivo listo: elegí dónde enviarlo.')}
+else{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download=name;document.body.append(a);a.click();a.remove();say('Archivo exportado.')}};
+if(!available)save();route();render();setInterval(tick,1000);
+</script></html>

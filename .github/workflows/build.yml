@@ -1,0 +1,71 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pruebas de la lógica (persistencia, turnos, cambio de fecha)
+        working-directory: tests
+        run: |
+          npm ci
+          TZ=America/Managua npm test
+          TZ=Asia/Tokyo npm test
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Compilación
+        run: gradle assembleDebug assembleRelease --no-daemon --stacktrace
+
+      # En main: APK de prueba (firma de depuración) para instalar y probar rápido.
+      - name: Publicar APK de prueba
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk MisHoras-debug.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest MisHoras-debug.apk \
+            --prerelease \
+            --title "Mis horas - APK de prueba (firma de depuración)" \
+            --notes "Solo para probar. No es la versión firmada con la clave DonPinol. Commit: ${GITHUB_SHA::7}"
+
+      # Si RELEASE_TAG apunta a una versión que aún no existe: release SIN firmar para la
+      # firma central (DonPinol-Firma). Una versión publicada nunca se sobrescribe.
+      - name: Publicar APK sin firmar (si la versión es nueva)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=$(tr -d ' \r\n' < RELEASE_TAG)
+          [[ "$TAG" =~ ^v[0-9][A-Za-z0-9._-]*$ ]] || { echo "RELEASE_TAG inválido"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "La versión $TAG ya existe: no se sobrescribe."
+            exit 0
+          fi
+          cp app/build/outputs/apk/release/app-release-unsigned.apk MisHoras-unsigned.apk
+          sha=$(sha256sum MisHoras-unsigned.apk | awk '{print $1}')
+          echo "$sha  MisHoras-unsigned.apk" > sha256.txt
+          gh release create "$TAG" MisHoras-unsigned.apk sha256.txt \
+            --target "$GITHUB_SHA" \
+            --title "Mis horas $TAG (sin firmar)" \
+            --notes "APK sin firmar para la firma central DonPinol. SHA-256: $sha"
