@@ -9,6 +9,15 @@ App Android (WebView + `assets/index.html`) para registrar jornadas: entrada/sal
 - Pruebas de la lógica (`tests/`, Node + jsdom, tiempo simulado): persistencia al cerrar y abrir, jornadas que cruzan medianoche, cambio de semana/mes/fecha, datos dañados, zona horaria. Se ejecutan en CI.
 - No verificado: ejecución en un teléfono real (las pruebas simulan el WebView), ni el aspecto visual de la nueva pantalla, ni el envío real a WhatsApp.
 
+## 1.1.0 · Corregir salida / editar jornadas (25-11-2026)
+Pedido de Pinol: una jornada con la salida sin marcar quedaba «en curso» y seguía sumando horas (de ayer a hoy), sin forma de arreglarlo.
+- Con una jornada en curso aparece el botón **Corregir salida** en el inicio; también hay **Corregir salida** / **Editar jornada** en cada jornada del historial.
+- Se pueden cambiar entrada, salida y turno (hora de Managua). En una jornada abierta se sugiere la salida normal del turno; se puede cambiar. Si se deja vacía, la jornada sigue en curso.
+- Se rechaza: salida antes de la entrada, horas en el futuro, horas que se cruzan con otra jornada y jornadas terminadas sin salida. Si algo se rechaza no se guarda nada.
+- La jornada corregida queda marcada («Nota: Corregida a mano») en el historial y en el informe; los valores originales se guardan en el propio registro (`original`).
+- Aviso en el inicio cuando una jornada lleva más de 12 h abierta.
+- Pruebas nuevas en `tests/` (6). No verificado: el selector de fecha/hora en un teléfono real ni el aspecto visual de la nueva pantalla.
+
 ## Cambios respecto al paquete recibido de Work (22-11-2026)
 - `index.html`: una sola línea cambiada (lectura del almacenamiento). Antes, un dato guardado dañado o con formato inesperado dejaba la pantalla en blanco; ahora se valida, se ignora y se guarda una copia en `donpinol.mishoras.v1.respaldo-danado`. Diseño y controles intactos.
 - Historial en pantalla aparte + compartir/exportar (pedido de Pinol): `index.html` con navegación por `#historial`; `MainActivity.java` con puente `MisHorasNativo` (WhatsApp directo, o selector de apps si no está instalado; CSV por FileProvider) y botón Atrás.

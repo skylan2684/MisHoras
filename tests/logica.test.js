@@ -317,3 +317,127 @@ test('el historial recuperado tras cerrar y abrir también se puede compartir', 
   assert.match(p.textos[0], /lunes, 23 de noviembre de 2026/);
   a.cerrar(); b.cerrar();
 });
+
+// ---------- Corregir salida / editar jornadas ----------
+const esperar = () => new Promise(r => setTimeout(r, 20));
+const entrada = (a, anio, m, d, h, mi) => { a.$('eStart').value = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`; };
+const salida = (a, anio, m, d, h, mi) => { a.$('eEnd').value = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`; };
+
+test('olvidó marcar la salida: avisa, permite corregir y las horas dejan de inflarse', async () => {
+  const a = abrir(managua(2026, 11, 24, 5, 0, 0));
+  a.turno(0); a.marcar();
+  a.irA(managua(2026, 11, 25, 15, 43, 0)); // hoy, casi un día después
+  assert.equal(a.$('week').textContent, '34 h 43 min'); // el problema que vio Pinol
+  assert.match(a.$('warn').textContent, /Olvidaste marcar la salida/i);
+  assert.equal(a.$('fix').hidden, false);
+  a.$('fix').click();
+  assert.equal(a.$('edit').hidden, false);
+  assert.equal(a.$('home').hidden, true);
+  assert.equal(a.$('eTitle').textContent, 'Corregir salida');
+  assert.equal(a.$('eStart').value, '2026-11-24T05:00');
+  assert.equal(a.$('eEnd').value, '2026-11-24T12:30'); // sugerida: fin normal del turno
+  salida(a, 2026, 11, 24, 12, 45);
+  a.$('eSave').click();
+  await esperar();
+  assert.equal(a.errores.length, 0, a.errores.join('|'));
+  assert.equal(a.$('edit').hidden, true);
+  assert.equal(a.$('home').hidden, false);
+  assert.equal(a.$('mark').textContent, 'Marcar entrada');
+  assert.equal(a.$('fix').hidden, true);
+  assert.equal(a.$('warn').textContent, '');
+  assert.equal(a.$('week').textContent, '7 h 45 min');
+  assert.equal(a.$('month').textContent, '7 h 45 min');
+  const [h] = a.historial();
+  assert.match(h[3], /^Salida: 12:45:00\s?PM$/i);
+  assert.match(h[4], /^Horas trabajadas: 07:45:00$/);
+  assert.match(h[5], /^Diferencia: \+00:15:00$/);
+  assert.match(h[6], /^Nota: Corregida a mano$/);
+  // se conserva al cerrar y abrir
+  const b = abrir(managua(2026, 11, 25, 16, 0, 0), a.guardado());
+  assert.deepEqual(b.historial(), a.historial());
+  assert.equal(b.$('mark').textContent, 'Marcar entrada');
+  a.cerrar(); b.cerrar();
+});
+
+test('el botón Corregir salida solo aparece con una jornada en curso', () => {
+  const a = abrir(managua(2026, 11, 23, 5, 0, 0));
+  assert.equal(a.$('fix').hidden, true);
+  a.marcar();
+  assert.equal(a.$('fix').hidden, false);
+  assert.equal(a.$('warn').textContent, '');
+  a.cerrar();
+});
+
+test('desde el historial se puede corregir la salida de la jornada abierta y editar una terminada', async () => {
+  const a = abrir(managua(2026, 11, 23, 5, 0, 0));
+  unaJornada(a);
+  a.irA(managua(2026, 11, 24, 16, 0, 0)); a.turno(1); a.marcar();
+  a.irA(managua(2026, 11, 25, 9, 0, 0));
+  a.$('nav').click();
+  const botones = [...a.w.document.querySelectorAll('.entry button')].map(b => b.textContent);
+  assert.deepEqual(botones, ['Corregir salida', 'Editar jornada']); // más reciente primero
+  // corregir la abierta (martes noche)
+  a.w.document.querySelectorAll('.entry button')[0].click();
+  salida(a, 2026, 11, 24, 21, 0);
+  a.$('eSave').click(); await esperar();
+  assert.equal(a.historial()[0][4], 'Horas trabajadas: 05:00:00');
+  // editar la terminada (lunes): entró 5:10 en vez de 5:00
+  a.w.document.querySelectorAll('.entry button')[1].click();
+  assert.equal(a.$('eTitle').textContent, 'Editar jornada');
+  entrada(a, 2026, 11, 23, 5, 10);
+  a.$('eSave').click(); await esperar();
+  const h = a.historial();
+  assert.match(h[1][2], /^Entrada: 5:10:00\s?AM$/i);
+  assert.match(h[1][4], /^Horas trabajadas: 07:20:00$/);
+  assert.match(h[1][5], /^Diferencia: −00:10:00$/);
+  assert.equal(a.errores.length, 0, a.errores.join('|'));
+  a.cerrar();
+});
+
+test('la corrección se rechaza si es inválida y no cambia nada', async () => {
+  const a = abrir(managua(2026, 11, 23, 5, 0, 0));
+  unaJornada(a);                                   // lunes 5:00-12:30
+  a.irA(managua(2026, 11, 24, 5, 0, 0)); a.marcar(); // martes 5:00 en curso
+  a.irA(managua(2026, 11, 24, 9, 0, 0));
+  const antes = a.guardado();
+  a.$('fix').click();
+  const probar = (fn, re) => { fn(); a.$('eSave').click(); assert.match(a.$('eNotice').textContent, re); assert.equal(a.$('edit').hidden, false); assert.equal(a.guardado(), antes); };
+  probar(() => salida(a, 2026, 11, 24, 4, 0), /después de la entrada/);
+  probar(() => salida(a, 2026, 11, 24, 10, 0), /futuro/);
+  probar(() => { salida(a, 2026, 11, 24, 8, 0); entrada(a, 2026, 11, 23, 12, 0); }, /cruzan/); // pisa el lunes
+  probar(() => { entrada(a, 2026, 11, 24, 5, 0); a.$('eStart').value = ''; }, /formato/);
+  probar(() => { entrada(a, 2026, 11, 25, 5, 0); salida(a, 2026, 11, 24, 8, 0); }, /futuro|después/);
+  a.$('eCancel').click(); await esperar();
+  assert.equal(a.$('edit').hidden, true);
+  assert.equal(a.$('mark').textContent, 'Marcar salida');
+  a.cerrar();
+});
+
+test('una jornada terminada no puede quedarse sin salida; la abierta sí puede seguir en curso', async () => {
+  const a = abrir(managua(2026, 11, 23, 5, 0, 0));
+  unaJornada(a);
+  a.$('nav').click();
+  a.w.document.querySelectorAll('.entry button')[0].click();
+  a.$('eEnd').value = '';
+  a.$('eSave').click();
+  assert.match(a.$('eNotice').textContent, /necesita hora de salida/);
+  a.$('eCancel').click(); await esperar();
+  // abierta: corregir solo la entrada y dejarla en curso
+  const b = abrir(managua(2026, 11, 24, 5, 30, 0));
+  b.marcar(); b.irA(managua(2026, 11, 24, 6, 0, 0));
+  b.$('fix').click(); entrada(b, 2026, 11, 24, 5, 0); b.$('eEnd').value = '';
+  b.$('eSave').click(); await esperar();
+  assert.equal(b.$('mark').textContent, 'Marcar salida');
+  assert.equal(b.$('timer').textContent, '01:00:00');
+  a.cerrar(); b.cerrar();
+});
+
+test('las jornadas corregidas se marcan en el informe compartido', async () => {
+  const p = puenteFalso();
+  const a = abrir(managua(2026, 11, 24, 5, 0, 0), null, { puente: p });
+  a.marcar(); a.irA(managua(2026, 11, 25, 9, 0, 0));
+  a.$('fix').click(); salida(a, 2026, 11, 24, 12, 30); a.$('eSave').click(); await esperar();
+  a.$('nav').click(); a.$('shareText').click();
+  assert.match(p.textos[0], /Salida: 12:30:00\s?PM\n   Horas trabajadas: 07:30:00\n   Diferencia: \+00:00:00\n   Nota: Corregida a mano/);
+  a.cerrar();
+});
