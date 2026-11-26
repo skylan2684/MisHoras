@@ -18,6 +18,9 @@ Pedido de Pinol: una jornada con la salida sin marcar quedaba «en curso» y seg
 - Aviso en el inicio cuando una jornada lleva más de 12 h abierta.
 - Pruebas nuevas en `tests/` (6). No verificado: el selector de fecha/hora en un teléfono real ni el aspecto visual de la nueva pantalla.
 
+## 1.2.0 · Agregar jornada olvidada (26-11-2026)
+Pedido de Pinol: un día en que no marcó ni entrada ni salida no se podía registrar. En *Historial* hay un botón **Agregar jornada olvidada** (propone ayer, turno Día); se cambian el día y las horas reales. Mismas validaciones que la corrección (salida obligatoria, sin futuro, sin cruzarse con otra jornada). Queda marcada «Agregada a mano». Pruebas nuevas (2). No verificado en teléfono real.
+
 ## Cambios respecto al paquete recibido de Work (22-11-2026)
 - `index.html`: una sola línea cambiada (lectura del almacenamiento). Antes, un dato guardado dañado o con formato inesperado dejaba la pantalla en blanco; ahora se valida, se ignora y se guarda una copia en `donpinol.mishoras.v1.respaldo-danado`. Diseño y controles intactos.
 - Historial en pantalla aparte + compartir/exportar (pedido de Pinol): `index.html` con navegación por `#historial`; `MainActivity.java` con puente `MisHorasNativo` (WhatsApp directo, o selector de apps si no está instalado; CSV por FileProvider) y botón Atrás.

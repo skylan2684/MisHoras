@@ -441,3 +441,42 @@ test('las jornadas corregidas se marcan en el informe compartido', async () => {
   assert.match(p.textos[0], /Salida: 12:30:00\s?PM\n   Horas trabajadas: 07:30:00\n   Diferencia: \+00:00:00\n   Nota: Corregida a mano/);
   a.cerrar();
 });
+
+// ---------- Agregar una jornada olvidada (no se marcó entrada ni salida) ----------
+test('agregar jornada olvidada: propone ayer, se guarda, suma y queda marcada', async () => {
+  const a = abrir(managua(2026, 11, 26, 4, 50, 0));
+  a.$('nav').click();
+  a.$('addDay').click();
+  assert.equal(a.$('eTitle').textContent, 'Agregar jornada olvidada');
+  assert.equal(a.$('eStart').value, '2026-11-25T05:00');
+  assert.equal(a.$('eEnd').value, '2026-11-25T12:30');
+  entrada(a, 2026, 11, 25, 5, 5); salida(a, 2026, 11, 25, 12, 40);
+  a.$('eSave').click(); await esperar();
+  assert.equal(a.errores.length, 0, a.errores.join('|'));
+  const [h] = a.historial();
+  assert.match(h[0], /^Fecha: miércoles, 25 de noviembre de 2026/);
+  assert.match(h[4], /^Horas trabajadas: 07:35:00$/);
+  assert.match(h[6], /^Nota: Agregada a mano$/);
+  assert.equal(a.$('week').textContent, '7 h 35 min');
+  const b = abrir(managua(2026, 11, 26, 5, 0, 0), a.guardado());
+  assert.deepEqual(b.historial(), a.historial());
+  a.cerrar(); b.cerrar();
+});
+
+test('agregar jornada olvidada: se rechaza sin salida, en el futuro o cruzada con otra', async () => {
+  const a = abrir(managua(2026, 11, 25, 5, 0, 0));
+  a.turno(0); a.marcar(); a.irA(managua(2026, 11, 25, 12, 30, 0)); a.marcar();
+  a.irA(managua(2026, 11, 26, 4, 50, 0));
+  a.$('nav').click(); a.$('addDay').click();
+  const antes = a.guardado();
+  a.$('eEnd').value = ''; a.$('eSave').click();
+  assert.match(a.$('eNotice').textContent, /necesita hora de salida/);
+  entrada(a, 2026, 11, 25, 6, 0); salida(a, 2026, 11, 25, 8, 0); a.$('eSave').click();
+  assert.match(a.$('eNotice').textContent, /cruzan/);
+  entrada(a, 2026, 11, 26, 5, 0); salida(a, 2026, 11, 26, 6, 0); a.$('eSave').click();
+  assert.match(a.$('eNotice').textContent, /futuro/);
+  assert.equal(a.guardado(), antes);
+  a.$('eCancel').click(); await esperar();
+  assert.equal(a.historial().length, 1);
+  a.cerrar();
+});

@@ -4,7 +4,7 @@
 [hidden]{display:none!important}#nav{padding:9px 14px;font-weight:600}.alt{width:100%;margin-top:10px;min-height:48px}input{font:inherit;width:100%;border-radius:12px;padding:12px;border:1px solid #aab9ae;background:#fff;color:inherit}input:focus-visible{outline:3px solid #ce8319}#edit label:not(:first-of-type){margin-top:14px}#warn{color:#8a4b00;font-weight:600}
 </style><main><header><b>Mis horas</b><button id="nav" type="button">Historial</button></header><div id="home"><section class="hero"><div class="row"><span class="tag" id="status"></span><small>Managua · NI</small></div><div class="clock" id="clock"></div><p class="date" id="date"></p><div class="row run"><span>Tiempo de jornada</span><strong id="timer"></strong></div></section>
 <section><label for="shift">Turno de la jornada</label><select id="shift"><option>Día · 5:00 a. m. – 12:30 p. m.</option><option>Noche · 4:00 p. m. – 9:00 p. m.</option><option>Domingo · 5:00 a. m. – 11:00 a. m.</option></select><button class="go" id="mark"></button><button class="alt" id="fix" type="button" hidden>Corregir salida</button><p id="warn"></p><p role="status" id="notice"></p></section>
-<section><h2 id="summary"></h2><div class="cards"><div>Esta semana<strong id="week"></strong></div><div>Este mes<strong id="month"></strong></div></div></section></div><div id="hist" hidden><section><h2>Historial de jornadas</h2><div id="history"></div></section><section><h2>Exportar y compartir</h2><button class="go" id="shareText" type="button">Compartir por WhatsApp</button><button class="alt" id="shareCsv" type="button">Exportar archivo (CSV)</button><p role="status" id="histNotice"></p></section></div><div id="edit" hidden><section><h2 id="eTitle"></h2><label for="eShift">Turno</label><select id="eShift"></select><label for="eStart">Entrada</label><input id="eStart" type="datetime-local"><label for="eEnd">Salida</label><input id="eEnd" type="datetime-local"><p class="muted" id="eHelp"></p><button class="go" id="eSave" type="button">Guardar corrección</button><button class="alt" id="eCancel" type="button">Cancelar</button><p role="status" id="eNotice"></p></section></div><footer>DonPinol TechWorks</footer></main>
+<section><h2 id="summary"></h2><div class="cards"><div>Esta semana<strong id="week"></strong></div><div>Este mes<strong id="month"></strong></div></div></section></div><div id="hist" hidden><section><h2>Historial de jornadas</h2><div id="history"></div><button class="alt" id="addDay" type="button">Agregar jornada olvidada</button></section><section><h2>Exportar y compartir</h2><button class="go" id="shareText" type="button">Compartir por WhatsApp</button><button class="alt" id="shareCsv" type="button">Exportar archivo (CSV)</button><p role="status" id="histNotice"></p></section></div><div id="edit" hidden><section><h2 id="eTitle"></h2><label for="eShift">Turno</label><select id="eShift"></select><label for="eStart">Entrada</label><input id="eStart" type="datetime-local"><label for="eEnd">Salida</label><input id="eEnd" type="datetime-local"><p class="muted" id="eHelp"></p><button class="go" id="eSave" type="button">Guardar corrección</button><button class="alt" id="eCancel" type="button">Cancelar</button><p role="status" id="eNotice"></p></section></div><footer>DonPinol TechWorks</footer></main>
 <script>
 const el=id=>document.getElementById(id), zone='America/Managua',fmt=options=>new Intl.DateTimeFormat('es-NI',{timeZone:zone,...options}),clockFmt=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',minute:'2-digit',second:'2-digit',hourCycle:'h12'}),dateFmt=fmt({dateStyle:'full'}),stamp={format:time=>fmt({dateStyle:'short'}).format(time)+' · '+clockFmt.format(time)};
 const lengths=[450,300,360],names=['Día','Noche','Domingo'],key='donpinol.mishoras.v1';
@@ -28,7 +28,7 @@ function fieldsOf(e){const closed=e.end!==null,difference=closed?e.end-e.start-l
   ['Salida',closed?(dateFmt.format(e.start)===dateFmt.format(e.end)?clockFmt.format(e.end):stamp.format(e.end)):'Pendiente'],
   ['Horas trabajadas',duration((e.end??Date.now())-e.start)],
   ['Diferencia',closed?(difference<0?'−':'+')+duration(Math.abs(difference)):'Pendiente de salida']
-].concat(e.edited?[['Nota','Corregida a mano']]:[])}
+].concat(e.edited?[['Nota',e.manual?'Agregada a mano':'Corregida a mano']]:[])}
 function render(){const r=active();el('status').textContent='REGISTRO REAL'+(r?' · EN CURSO':'');el('summary').textContent='Horas acumuladas';el('shift').disabled=!!r;if(r)el('shift').selectedIndex=r.shift;el('mark').textContent=r?'Marcar salida':'Marcar entrada';el('fix').hidden=!r;
 el('history').replaceChildren();for(const [e,idx] of rows().map((x,i)=>[x,i]).reverse()){const div=document.createElement('div');div.className='entry';const closed=e.end!==null;const fields=fieldsOf(e);
 for(const [label,value] of fields){
@@ -67,7 +67,8 @@ el('eShift').innerHTML=el('shift').innerHTML;
 const toInput=ms=>stampFull(ms).slice(0,16).replace(' ','T');
 const fromInput=v=>{const m=/^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d)/.exec((v||'').trim());return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4]+6,+m[5]):null};
 const eSay=t=>{el('eNotice').textContent=t};
-function openEdit(i){const r=rows()[i];if(!r)return;editIdx=i;const open=r.end===null;
+function openEdit(i){const nuevo=i===-1,r=nuevo?null:rows()[i];if(!nuevo&&!r)return;editIdx=i;const open=!nuevo&&r.end===null;
+if(nuevo){const day=86400000,mid=Math.floor((Date.now()-6*3600000)/day)*day+6*3600000,s0=mid-day+5*3600000;el('eTitle').textContent='Agregar jornada olvidada';el('eShift').selectedIndex=0;el('eStart').value=toInput(s0);el('eEnd').value=toInput(s0+lengths[0]*60000);el('eHelp').textContent='Se propone ayer, turno Día. Cambiá el día y las horas por las reales de esa jornada.';eSay('');location.hash='#editar';route();return}
 el('eTitle').textContent=open?'Corregir salida':'Editar jornada';
 el('eShift').selectedIndex=r.shift;el('eStart').value=toInput(r.start);
 // En una jornada abierta se sugiere la salida normal del turno (o ahora, si todavía no llegó); se puede cambiar.
@@ -77,15 +78,17 @@ eSay('');location.hash='#editar';route()}
 function closeEdit(){editIdx=null;route();if(location.hash==='#editar'){if(history.length>1)history.back();else{location.hash='';route()}}}
 el('fix').onclick=()=>{const i=rows().findIndex(r=>r.end===null);if(i>=0)openEdit(i)};
 el('eCancel').onclick=closeEdit;
-el('eSave').onclick=()=>{const r=rows()[editIdx];if(!r){closeEdit();return}
+el('addDay').onclick=()=>openEdit(-1);
+el('eSave').onclick=()=>{const nuevo=editIdx===-1,r=nuevo?null:rows()[editIdx];if(!nuevo&&!r){closeEdit();return}
 const now=Date.now(),s=fromInput(el('eStart').value),raw=el('eEnd').value.trim(),e=raw?fromInput(raw):null;
 if(s===null||(raw&&e===null)){eSay('Revisá las horas: usá el formato AAAA-MM-DD HH:MM.');return}
 if(s>now){eSay('La entrada no puede ser en el futuro.');return}
-if(e===null&&r.end!==null){eSay('Una jornada terminada necesita hora de salida.');return}
+if(e===null&&(nuevo||r.end!==null)){eSay('Una jornada terminada necesita hora de salida.');return}
 if(e!==null&&e<=s){eSay('La salida tiene que ser después de la entrada.');return}
 if(e!==null&&e>now){eSay('La salida no puede ser en el futuro.');return}
 const top=e===null?Infinity:e;
 if(rows().some((o,i)=>i!==editIdx&&s<(o.end??Infinity)&&top>o.start)){eSay('Esas horas se cruzan con otra jornada.');return}
+if(nuevo){data.real.push({start:s,end:e,shift:el('eShift').selectedIndex,edited:true,manual:true});data.real.sort((a,b)=>a.start-b.start);save();el('notice').textContent='Jornada agregada.';closeEdit();render();return}
 const cambio=s!==r.start||e!==r.end||+el('eShift').selectedIndex!==r.shift;
 if(cambio){if(!r.original)r.original={start:r.start,end:r.end};r.start=s;r.end=e;r.shift=el('eShift').selectedIndex;r.edited=true;data.real.sort((a,b)=>a.start-b.start)}
 save();el('notice').textContent=cambio?(e!==null?'Jornada corregida.':'Entrada corregida.'):'Sin cambios.';closeEdit();render()};
